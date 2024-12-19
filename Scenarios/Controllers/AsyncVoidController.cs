@@ -14,6 +14,8 @@ namespace Scenarios.Controllers
         {
             await Task.Delay(1000);
 
+            // ЭТО приведет к сбою процесса, поскольку мы пишем после завершения ответа в фоновом потоке
+            //
             // THIS will crash the process since we're writing after the response has completed on a background thread
             await Response.WriteAsync("Hello World");
         }
@@ -25,6 +27,7 @@ namespace Scenarios.Controllers
             {
                 var ws = await HttpContext.WebSockets.AcceptWebSocketAsync();
 
+                // Это не работает, потому что мы не удерживаем запрос открытым до тех пор, пока веб-сокет не будет закрыт!
                 // This is broken because we're not holding the request open until the WebSocket is closed!
                 _ = Echo(ws);
             }
