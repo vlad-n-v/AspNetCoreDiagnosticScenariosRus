@@ -12,9 +12,4 @@
 
 *NOTE:* Приведенные здесь примеры основаны на опыте работы с клиентскими приложениями и проблемах, обнаруженных на Github и Stack Overflow.
 
-### All Thanks to Our Contributors:
-<a href="https://github.com/davidfowl/AspNetCoreDiagnosticScenarios/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=davidfowl/AspNetCoreDiagnosticScenarios" />
-</a>
-
 *Приечание:* основано на оригинальном [руководстве](https://github.com/davidfowl/AspNetCoreDiagnosticScenarios.git) Дэвида Фаулера
