@@ -39,6 +39,7 @@ namespace Scenarios.Controllers
         [HttpGet("/cancellation-3")]
         public async Task<Stream> HttpClientAsyncWithCancellationBest([FromServices]IHttpClientFactory clientFactory)
         {
+            // При этом запросе тайм-аут настраивается при запуске
             // This has the timeout configured in Startup
             using (var client = clientFactory.CreateClient("timeout"))
             {
