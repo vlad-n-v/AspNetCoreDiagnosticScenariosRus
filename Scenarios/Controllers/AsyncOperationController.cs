@@ -6,6 +6,10 @@ using Scenarios.Services;
 namespace Scenarios.Controllers
 {
     /// <summary>
+    /// Этот контроллер показывает различные способы, с помощью которых люди пытаются заблокировать код через асинхронный API. 
+    /// Не существует хорошего способа превратить асинхронный код в синхронный. 
+    /// Все эти блокирующие вызовы могут привести к нехватке пула потоков.
+    /// 
     /// This controller shows to various ways people attempt to blocking code over an async API. There is no 
     /// good way to turn asynchronous code into synchronous code. All of these blocking calls can cause thread pool starvation.
     /// </summary>
@@ -92,6 +96,8 @@ namespace Scenarios.Controllers
         }
 
         /// <summary>
+        /// DoSyncOperationWithAsyncReturn с асинхронным возвратом имеет асинхронный API для синхронного вызова.
+        /// 
         /// DoSyncOperationWithAsyncReturn has an async API over a synchronous call.
         /// </summary>
         [HttpGet("/async-9")]
