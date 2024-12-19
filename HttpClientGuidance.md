@@ -1,24 +1,25 @@
-# Table of contents
- - [Using HttpClient](#using-httpclient)
- - [Different platform implementations](#different-platform-implementations)
- - [A note about WebClient](#a-note-about-webclient)
+# Содержание
+- [Содержание](#содержание)
+  - [Использование HttpClient](#использование-httpclient)
+  - [Различные реализации платформы](#различные-реализации-платформы)
+  - [Примечание о веб-клиенте](#примечание-о-веб-клиенте)
    
-## Using HttpClient
+## Использование HttpClient
 
-[HttpClient](https://docs.microsoft.com/en-us/dotnet/api/system.net.http.httpclient?view=net-5.0) is the primary API for making outbound HTTP requests in .NET. 
+[HttpClient](https://docs.microsoft.com/en-us/dotnet/api/system.net.http.httpclient?view=net-5.0) является основным API для отправки исходящих HTTP-запросов в .NET.
 
-## Different Platform Implementations
+## Различные реализации платформы
 
-`HttpClient` is a wrapper API around an `HttpMessageHandler`. The most inner `HttpMessageHandler` is the one that's responsible for making the HTTP request. There are several implementations on various .NET platforms. This document is focused on server applications and will focus on 2-3 main implementations:
-- HttpClientHandler/WebRequestHandler on .NET Framework
-- SocketHttpHandler on .NET Core/5
-- WinHttpHandler on .NET Framework or .NET Core/5 (runs on both but is Windows-specific)
+`HttpClient` - это API-оболочка для `HttpMessageHandler`. Внутренности `HttpMessageHandler` - это то, что отвечает за отправку HTTP-запроса. Существует несколько реализаций на разных платформах .NET platforms. Этот документ посвящен серверным приложениям и будет посвящен 2-3 основным реализациям:
+- HttpClientHandler/WebRequestHandler в .NET Framework
+- SocketHttpHandler в .NET Core/5
+- WinHttpHandler в .NET Framework или .NET Core/5 (работает на обоих, но зависит от Windows)
 
-## A note about WebClient
+## Примечание о веб-клиенте
 
-WebClient is considered a legacy .NET API at this point and has been completely superseded by HttpClient. New code should be written with HttpClient.
+На данный момент WebClient считается устаревшим .NET API и был полностью заменен HttpClient. Новый код должен быть написан с помощью HttpClient.
 
-❌ **BAD** This example uses the legacy WebClient to make a synchronous HTTP request.
+❌ **BAD** В этом примере используется устаревший веб-клиент для выполнения асинхронного HTTP-запроса.
 
 ```C#
 public string DoSomethingAsync()
@@ -28,7 +29,7 @@ public string DoSomethingAsync()
 }
 ```
 
-:white_check_mark: **GOOD** This example uses an HttpClient to asynchronously make an HTTP request.
+:white_check_mark: **GOOD** В этом примере используется HttpClient для асинхронного выполнения HTTP-запроса.
 
 ```C#
 static readonly HttpClient client = new HttpClient();
