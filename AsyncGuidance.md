@@ -1,37 +1,45 @@
-# Table of contents
- - [Asynchronous Programming](#asynchronous-programming)
-   - [Asynchrony is viral](#asynchrony-is-viral)
-   - [Async void](#async-void)
-   - [Prefer Task.FromResult over Task.Run for pre-computed or trivially computed data](#prefer-taskfromresult-over-taskrun-for-pre-computed-or-trivially-computed-data)
-   - [Avoid using Task.Run for long-running work that blocks the thread](#avoid-using-taskrun-for-long-running-work-that-blocks-the-thread)
-   - [Avoid using Task.Result and Task.Wait](#avoid-using-taskresult-and-taskwait)
-   - [Prefer await over ContinueWith](#prefer-await-over-continuewith)
-   - [Always create TaskCompletionSource\<T\> with TaskCreationOptions.RunContinuationsAsynchronously](#always-create-taskcompletionsourcet-with-taskcreationoptionsruncontinuationsasynchronously)
-   - [Always dispose CancellationTokenSource(s) used for timeouts](#always-dispose-cancellationtokensources-used-for-timeouts)
-   - [Always flow CancellationToken(s) to APIs that take a CancellationToken](#always-flow-cancellationtokens-to-apis-that-take-a-cancellationtoken)
-   - [Cancelling uncancellable operations](#cancelling-uncancellable-operations)
-   - [Always call FlushAsync on StreamWriter(s) or Stream(s) before calling Dispose](#always-call-flushasync-on-streamwriters-or-streams-before-calling-dispose)
-   - [Prefer async/await over directly returning Task](#prefer-asyncawait-over-directly-returning-task)
-   - [AsyncLocal\<T\>](#asynclocalt)
-   - [ConfigureAwait](#configureawait)
-   - [Scenarios](#scenarios)
-   - [Timer callbacks](#timer-callbacks)
-   - [Implicit async void delegates](#implicit-async-void-delegates)
-   - [ConcurrentDictionary.GetOrAdd](#concurrentdictionarygetoradd)
-   - [Constructors](#constructors)
-   - [WindowsIdentity.RunImpersonated](#windowsidentityrunimpersonated)
- 
-# Asynchronous Programming
+# Содержание
 
-Asynchronous programming has been around for several years on the .NET platform but has historically been very difficult to do well. Since the introduction of async/await
-in C# 5 asynchronous programming has become mainstream. Modern frameworks (like ASP.NET Core) are fully asynchronous and it's very hard to avoid the async keyword when writing
-web services. As a result, there's been lots of confusion on the best practices for async and how to use it properly. This section will try to lay out some guidance with examples of bad and good patterns of how to write asynchronous code.
+- [Содержание](#содержание)
+- [Асинхронное программирование](#асинхронное-программирование)
+  - [Асинхронность это вирус](#асинхронность-это-вирус)
+  - [Async void](#async-void)
+  - [Предпочитайте `Task.FromResult` вместо `Task.Run` для заранее вычисленных или легко вычисляемых данных.](#предпочитайте-taskfromresult-вместо-taskrun-для-заранее-вычисленных-или-легко-вычисляемых-данных)
+  - [Избегайте использования Task.Run для длительных операций, блокирующих поток](#избегайте-использования-taskrun-для-длительных-операций-блокирующих-поток)
+  - [Избегайте использования `Task.Result` и `Task.Wait`](#избегайте-использования-taskresult-и-taskwait)
+    - [⚠️ Синхронный код вместо `async`](#️-синхронный-код-вместо-async)
+    - [⚠️ Взаимные блокировки](#️-взаимные-блокировки)
+  - [Prefer `await` over `ContinueWith`](#prefer-await-over-continuewith)
+  - [Always create `TaskCompletionSource<T>` with `TaskCreationOptions.RunContinuationsAsynchronously`](#always-create-taskcompletionsourcet-with-taskcreationoptionsruncontinuationsasynchronously)
+  - [Always dispose `CancellationTokenSource`(s) used for timeouts](#always-dispose-cancellationtokensources-used-for-timeouts)
+  - [Always flow `CancellationToken`(s) to APIs that take a `CancellationToken`](#always-flow-cancellationtokens-to-apis-that-take-a-cancellationtoken)
+  - [Cancelling uncancellable operations](#cancelling-uncancellable-operations)
+    - [Using CancellationTokens](#using-cancellationtokens)
+    - [Using a timeout](#using-a-timeout)
+  - [Always call `FlushAsync` on `StreamWriter`(s) or `Stream`(s) before calling `Dispose`](#always-call-flushasync-on-streamwriters-or-streams-before-calling-dispose)
+  - [Prefer `async`/`await` over directly returning `Task`](#prefer-asyncawait-over-directly-returning-task)
+  - [AsyncLocal\<T\>](#asynclocalt)
+    - [Creating an AsyncLocal\<T\>](#creating-an-asynclocalt)
+    - [Don&#39;t leak your AsyncLocal\<T\>](#dont-leak-your-asynclocalt)
+      - [Common APIs that capture the ExecutionContext](#common-apis-that-capture-the-executioncontext)
+    - [Avoid setting AsyncLocal\<T\> values outside of async methods](#avoid-setting-asynclocalt-values-outside-of-async-methods)
+  - [ConfigureAwait](#configureawait)
+- [Scenarios](#scenarios)
+  - [`Timer` callbacks](#timer-callbacks)
+  - [Implicit `async void` delegates](#implicit-async-void-delegates)
+  - [`ConcurrentDictionary.GetOrAdd`](#concurrentdictionarygetoradd)
+  - [Constructors](#constructors)
+  - [WindowsIdentity.RunImpersonated](#windowsidentityrunimpersonated)
 
-## Asynchrony is viral 
+# Асинхронное программирование
 
-Once you go async, all of your callers **SHOULD** be async, since efforts to be async amount to nothing unless the entire call stack is async. In many cases, being partially asynchronous can be worse than being entirely synchronous. Therefore it is best to go all in, and make everything async at once.
+Асинхронное программирование существует на платформе .NET уже несколько лет, но исторически его было очень трудно реализовать правильно. С введением async/await в C# 5 асинхронное программирование стало мейнстримом. Современные фреймворки (такие как ASP.NET Core) полностью асинхронны, и очень трудно избежать использования ключевого слова async при написании веб-сервисов. В результате возникло много путаницы относительно лучших практик для async и того, как правильно его использовать. Этот раздел попытается изложить некоторые рекомендации с примерами плохих и хороших паттернов написания асинхронного кода.
 
-❌ **BAD** This example uses the `Task.Result` and as a result blocks the current thread to wait for the result. This is an example of [sync over async](#avoid-using-taskresult-and-taskwait).
+## Асинхронность это вирус
+
+Как только вы переходите на асинхронное программирование, все ваши вызывающие функции **ДОЛЖНЫ** быть асинхронными, поскольку попытки использовать асинхронность не имеют смысла, если вся цепочка вызовов не является асинхронной. В многих случаях частичная асинхронность может быть хуже, чем полная синхронность. Поэтому лучше всего сразу перейти на полную асинхронность и сделать все асинхронным.
+
+❌ **ПЛОХО** Этот пример использует `Task.Result`, и в результате блокирует текущий поток, ожидая результат. Это пример [sync over async](#avoid-using-taskresult-and-taskwait).
 
 ```C#
 public int DoSomethingAsync()
@@ -41,7 +49,7 @@ public int DoSomethingAsync()
 }
 ```
 
-:white_check_mark: **GOOD** This example uses the await keyword to get the result from `CallDependencyAsync`.
+✅ **ХОРОШО** Этот пример использует ключевое слово await для получения результата из `CallDependencyAsync`.
 
 ```C#
 public async Task<int> DoSomethingAsync()
@@ -53,9 +61,9 @@ public async Task<int> DoSomethingAsync()
 
 ## Async void
 
-The use of async void in ASP.NET Core applications is **ALWAYS** bad. Avoid it, never do it. Typically, it's used when developers are trying to implement fire-and-forget patterns triggered by a controller action. Async void methods will crash the process if an exception is thrown. We'll look at more of the patterns that cause developers to do this in ASP.NET Core applications but here's a simple example:
+Использование async void в приложениях ASP.NET Core **ВСЕГДА** плохо. Избегайте этого, никогда не делайте этого. Обычно это используется, когда разработчики пытаются реализовать паттерны "fire-and-forget" (отправил и забыл), инициируемые действием контроллера. Методы async void приведут к сбою процесса, если будет выброшено исключение. Мы рассмотрим больше паттернов, которые заставляют разработчиков делать это в приложениях ASP.NET Core, но вот простой пример:
 
-❌ **BAD** Async void methods can't be tracked and therefore unhandled exceptions can result in application crashes.
+❌ **ПЛОХО** Методы async void не могут быть отслежены, и, следовательно, необработанные исключения могут привести к сбоям приложения.
 
 ```C#
 public class MyController : Controller
@@ -66,7 +74,7 @@ public class MyController : Controller
         BackgroundOperationAsync();
         return Accepted();
     }
-    
+  
     public async void BackgroundOperationAsync()
     {
         var result = await CallDependencyAsync();
@@ -75,7 +83,7 @@ public class MyController : Controller
 }
 ```
 
-:white_check_mark: **GOOD** `Task`-returning methods are better since unhandled exceptions trigger the [`TaskScheduler.UnobservedTaskException`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.taskscheduler.unobservedtaskexception?view=netframework-4.7.2).
+✅ **ХОРОШО** Методы, возвращающие `Task`, лучше, поскольку необработанные исключения вызывают [`TaskScheduler.UnobservedTaskException`]().
 
 ```C#
 public class MyController : Controller
@@ -86,7 +94,7 @@ public class MyController : Controller
         Task.Run(BackgroundOperationAsync);
         return Accepted();
     }
-    
+  
     public async Task BackgroundOperationAsync()
     {
         var result = await CallDependencyAsync();
@@ -95,11 +103,11 @@ public class MyController : Controller
 }
 ```
 
-## Prefer `Task.FromResult` over `Task.Run` for pre-computed or trivially computed data
+## Предпочитайте `Task.FromResult` вместо `Task.Run` для заранее вычисленных или легко вычисляемых данных.
 
-For pre-computed results, there's no need to call `Task.Run`, which will end up queuing a work item to the thread pool that will immediately complete with the pre-computed value. Instead, use `Task.FromResult`, to create a task wrapping already computed data.
+Для заранее вычисленных результатов нет необходимости вызывать `Task.Run`, который в конечном итоге добавит элемент работы в пул потоков, который немедленно завершится с заранее вычисленным значением. Вместо этого используйте `Task.FromResult`, чтобы создать задачу, оборачивающую уже вычисленные данные.
 
-❌ **BAD** This example wastes a thread-pool thread to return a trivially computed value.
+❌ **ПЛОХО** Этот пример тратит поток из пула потоков для возврата легко вычисляемого значения.
 
 ```C#
 public class MyLibrary
@@ -111,7 +119,7 @@ public class MyLibrary
 }
 ```
 
-:white_check_mark: **GOOD** This example uses `Task.FromResult` to return the trivially computed value. It does not use any extra threads as a result.
+✅ **ХОРОШО** Этот пример использует `Task.FromResult` для возврата тривиально вычисленного значения. В результате не используются дополнительные потоки.
 
 ```C#
 public class MyLibrary
@@ -123,9 +131,9 @@ public class MyLibrary
 }
 ```
 
-:bulb:**NOTE: Using `Task.FromResult` will result in a `Task` allocation. Using `ValueTask<T>` can completely remove that allocation.**
+💡**ПРИМЕЧАНИЕ: Использование `Task.FromResult` приведет к выделению `Task`. Использование `ValueTask<T>` может полностью устранить это выделение.**
 
-:white_check_mark: **GOOD** This example uses a `ValueTask<int>` to return the trivially computed value. It does not use any extra threads as a result. It also does not allocate an object on the managed heap.
+✅ **ХОРОШО** Этот пример использует `ValueTask<int>` для возврата тривиально вычисленного значения. В результате не используются дополнительные потоки, и также не происходит выделение объекта в управляемой кучи.
 
 ```C#
 public class MyLibrary
@@ -137,34 +145,33 @@ public class MyLibrary
 }
 ```
 
-## Avoid using Task.Run for long-running work that blocks the thread
+## Избегайте использования Task.Run для длительных операций, блокирующих поток
 
-Long-running work in this context refers to a thread that's running for the lifetime of the application doing background work (like processing queue items, or sleeping and waking up to process some data). `Task.Run` will queue a work item to the thread pool. The assumption is that that work will finish quickly (or quickly enough to allow reusing that thread within some reasonable timeframe). Stealing a thread-pool thread for long-running work is bad since it takes that thread away from other work that could be done (timer callbacks, task continuations, etc). Instead, spawn a new thread manually to do long-running blocking work.
+Длительная работа в этом контексте относится к потоку, который работает на протяжении всего времени работы приложения, выполняя фоновую работу (например, обработка элементов очереди или ожидание и пробуждение для обработки данных). `Task.Run` добавит элемент работы в пул потоков. Предполагается, что эта работа завершится быстро (или достаточно быстро, чтобы позволить повторное использование этого потока в разумные сроки). Использование потока из пула потоков для длительной работы является плохой практикой, так как это отвлекает поток от другой работы, которая могла бы быть выполнена (обработчики таймеров, продолжения задач и т. д.). Вместо этого создайте новый поток вручную для выполнения длительной блокирующей работы.
 
-:bulb: **NOTE: The thread pool grows if you block threads but it's bad practice to do so.**
+💡 **ПРИМЕЧАНИЕ: Пул потоков растет, если вы блокируете потоки, но это плохая практика.**
 
-:bulb: **NOTE:`Task.Factory.StartNew` has an option `TaskCreationOptions.LongRunning` that under the covers creates a new thread and returns a Task that represents the execution. Using this properly requires several non-obvious parameters to be passed in to get the right behavior on all platforms.**
+💡 **ПРИМЕЧАНИЕ: `Task.Factory.StartNew` имеет опцию `TaskCreationOptions.LongRunning`, которая в фоновом режиме создает новый поток и возвращает задачу, представляющую выполнение. Правильное использование этого требует передачи нескольких неочевидных параметров для получения правильного поведения на всех платформах.**
 
-:bulb: **NOTE: Don't use `TaskCreationOptions.LongRunning` with async code as this will create a new thread which will be destroyed after first `await`.**
+💡 **ПРИМЕЧАНИЕ: Не используйте `TaskCreationOptions.LongRunning` с асинхронным кодом, так как это создаст новый поток, который будет уничтожен после первого `await`.**
 
-
-❌ **BAD** This example steals a thread-pool thread forever, to execute queued work on a `BlockingCollection<T>`.
+❌ **ПЛОХО** Этот пример навсегда отвлекает поток из пула потоков для выполнения очередной работы в `BlockingCollection<T>`.
 
 ```C#
 public class QueueProcessor
 {
     private readonly BlockingCollection<Message> _messageQueue = new BlockingCollection<Message>();
-    
+  
     public void StartProcessing()
     {
         Task.Run(ProcessQueue);
     }
-    
+  
     public void Enqueue(Message message)
     {
         _messageQueue.Add(message);
     }
-    
+  
     private void ProcessQueue()
     {
         foreach (var item in _messageQueue.GetConsumingEnumerable())
@@ -172,33 +179,33 @@ public class QueueProcessor
              ProcessItem(item);
         }
     }
-    
+  
     private void ProcessItem(Message message) { }
 }
 ```
 
-:white_check_mark: **GOOD** This example uses a dedicated thread to process the message queue instead of a thread-pool thread.
+✅ **ХОРОШО** Этот пример использует выделенный поток для обработки очереди сообщений вместо потока из пула потоков.
 
 ```C#
 public class QueueProcessor
 {
     private readonly BlockingCollection<Message> _messageQueue = new BlockingCollection<Message>();
-    
+  
     public void StartProcessing()
     {
         var thread = new Thread(ProcessQueue) 
         {
-            // This is important as it allows the process to exit while this thread is running
+            // Это важно, так как позволяет процессу завершиться, пока этот поток работает
             IsBackground = true
         };
         thread.Start();
     }
-    
+  
     public void Enqueue(Message message)
     {
         _messageQueue.Add(message);
     }
-    
+  
     private void ProcessQueue()
     {
         foreach (var item in _messageQueue.GetConsumingEnumerable())
@@ -206,12 +213,12 @@ public class QueueProcessor
              ProcessItem(item);
         }
     }
-    
+  
     private void ProcessItem(Message message) { }
 }
 ```
 
-:white_check_mark: **GOOD** This example utilizes a `TaskFactory` with `TaskCreationOptions.LongRunning` to process the message queue instead of creating a thread manually.
+✅ **ХОРОШО** Этот пример использует `TaskFactory` с `TaskCreationOptions.LongRunning` для обработки очереди сообщений вместо создания потока вручную.
 
 ```C#
 public class QueueProcessor
@@ -237,96 +244,95 @@ public class QueueProcessor
 }
 ```
 
-Utilizing `TaskCreationOptions.LongRunning` introduces several advantages in comparison with manual thread creation:
+Использование `TaskCreationOptions.LongRunning` имеет несколько преимуществ по сравнению с ручным созданием потоков:
 
-- It can be easily combined with `await` and TPL APIs, such as `Task.WhenAll`, amongst others.
-- It provides a superior exception-handling mechanism. For instance, in the event of an unhandled exception in a manually created thread, the application will crash (unless handled via `AppDomain.CurrentDomain.UnhandledException`), but with `.LongRunning`, it will be wrapped into a `Task` as an `AggregateException`.
+* Его можно легко комбинировать с `await` и API TPL, такими как `Task.WhenAll` и другими.
+* Он предоставляет более надежный механизм обработки исключений. Например, в случае необработанного исключения в вручную созданном потоке приложение завершится (если не обработано через `AppDomain.CurrentDomain.UnhandledException`), но с `.LongRunning` оно будет обернуто в `Task` как `AggregateException`.
 
-:bulb: **NOTE: The `TaskCreationOptions.LongRunning` option is essentially a recommendation to the `TaskScheduler`, which may interpret it differently in custom `TaskScheduler` applications or runtimes, or future updates to the .NET runtime libraries. If your primary goal is to spawn a new dedicated thread, then you might consider using the manual thread creation approach discussed previously.**
+💡 **ПРИМЕЧАНИЕ: Опция `TaskCreationOptions.LongRunning` по сути является рекомендацией для `TaskScheduler`, который может интерпретировать ее по-разному в пользовательских приложениях `TaskScheduler` или средах выполнения, или в будущих обновлениях библиотек .NET. Если ваша основная цель — создать новый выделенный поток, то вы можете рассмотреть возможность использования подхода ручного создания потоков, обсужденного ранее.**
 
+## Избегайте использования `Task.Result` и `Task.Wait`
 
-## Avoid using `Task.Result` and `Task.Wait`
+Существует очень немного способов правильно использовать `Task.Result` и `Task.Wait`, поэтому общий совет — полностью избегать их использования в вашем коде.
 
-There are very few ways to use `Task.Result` and `Task.Wait` correctly so the general advice is to completely avoid using them in your code. 
+### ⚠️ Синхронный код вместо `async`
 
-### :warning: Sync over `async`
+Использование `Task.Result` или `Task.Wait` для блокировки ожидания завершения асинхронной операции *ГОРАЗДО* хуже, чем вызов действительно синхронного API для блокировки. Это явление называется "Синхронный код вместо асинхронного". Вот что происходит на очень высоком уровне:
 
-Using `Task.Result` or `Task.Wait` to block waiting on an asynchronous operation to complete is *MUCH* worse than calling a truly synchronous API to block. This phenomenon is dubbed "Sync over async". Here is what happens at a very high level:
+* Асинхронная операция запускается.
+* Поток, который вызывает операцию, блокируется в ожидании ее завершения.
+* Когда асинхронная операция завершается, она разблокирует код, ожидающий завершения этой операции. Это происходит на другом потоке.
 
-- An asynchronous operation is kicked off.
-- The calling thread is blocked waiting for that operation to complete.
-- When the asynchronous operation completes, it unblocks the code waiting on that operation. This takes place on another thread.
+В результате нам нужно использовать 2 потока вместо 1 для завершения синхронных операций. Это обычно приводит к [истощению пула потоков]() и приводит к сбоям в работе сервиса.
 
-The result is that we need to use 2 threads instead of 1 to complete synchronous operations. This usually leads to [thread-pool starvation](https://blogs.msdn.microsoft.com/vancem/2018/10/16/diagnosing-net-core-threadpool-starvation-with-perfview-why-my-service-is-not-saturating-all-cores-or-seems-to-stall/) and results in service outages.
+### ⚠️ Взаимные блокировки
 
-### :warning: Deadlocks
+`SynchronizationContext` — это абстракция, которая дает моделям приложений возможность контролировать, где выполняются асинхронные продолжения. ASP.NET (не Core), WPF и Windows Forms имеют реализацию, которая приведет к взаимной блокировке, если `Task.Wait` или `Task.Result` используются в основном потоке. Это поведение привело к множеству "умных" фрагментов кода, которые показывают "правильный" способ блокировки ожидания завершения задачи. На самом деле, нет хорошего способа заблокировать ожидание завершения задачи.
 
-The `SynchronizationContext` is an abstraction that gives application models a chance to control where asynchronous continuations run. ASP.NET (non-core), WPF, and Windows Forms each have an implementation that will result in a deadlock if Task.Wait or Task.Result is used on the main thread. This behavior has led to a bunch of "clever" code snippets that show the "right" way to block waiting for a Task. The truth is, there's no good way to block waiting for a Task to complete.
+💡**ПРИМЕЧАНИЕ: ASP.NET Core не имеет `SynchronizationContext` и не подвержен проблеме взаимной блокировки.**
 
-:bulb:**NOTE: ASP.NET Core does not have a `SynchronizationContext` and is not prone to the deadlock problem.**
-
-❌ **BAD** The below are all examples that are, in one way or another, trying to avoid the deadlock situation but still succumb to "sync over async" problems.
+❌ **ПЛОХО** Ниже приведены примеры, которые, так или иначе, пытаются избежать ситуации взаимной блокировки, но все же подвержены проблемам "синхронного кода вместо асинхронного".
 
 ```C#
 public string DoOperationBlocking()
 {
-    // Bad - Blocking the thread that enters.
-    // DoAsyncOperation will be scheduled on the default task scheduler, and remove the risk of deadlocking.
-    // In the case of an exception, this method will throw an AggregateException wrapping the original exception.
+    // ПЛОХО - Блокировка потока, который входит.
+    // DoAsyncOperation будет запланирована на стандартном планировщике задач, что устраняет риск взаимной блокировки.
+    // В случае исключения этот метод выбросит AggregateException, обертывающий оригинальное исключение.
     return Task.Run(() => DoAsyncOperation()).Result;
 }
 
 public string DoOperationBlocking2()
 {
-    // Bad - Blocking the thread that enters.
-    // DoAsyncOperation will be scheduled on the default task scheduler, and remove the risk of deadlocking.
-    // In the case of an exception, this method will throw the exception without wrapping it in an AggregateException.
+    // ПЛОХО - Блокировка потока, который входит.
+    // DoAsyncOperation будет запланирована на стандартном планировщике задач, что устраняет риск взаимной блокировки.
+    // В случае исключения этот метод выбросит исключение без обертывания его в AggregateException.
     return Task.Run(() => DoAsyncOperation()).GetAwaiter().GetResult();
 }
 
 public string DoOperationBlocking3()
 {
-    // Bad - Blocking the thread that enters, and blocking the threadpool thread inside.
-    // In the case of an exception, this method will throw an AggregateException containing another AggregateException, containing the original exception.
+    // ПЛОХО - Блокировка потока, который входит, и блокировка потока пула потоков внутри.
+    // В случае исключения этот метод выбросит AggregateException, содержащий другой AggregateException, содержащий оригинальное исключение.
     return Task.Run(() => DoAsyncOperation().Result).Result;
 }
 
 public string DoOperationBlocking4()
 {
-    // Bad - Blocking the thread that enters, and blocking the threadpool thread inside.
+    // ПЛОХО - Блокировка потока, который входит, и блокировка потока пула потоков внутри.
     return Task.Run(() => DoAsyncOperation().GetAwaiter().GetResult()).GetAwaiter().GetResult();
 }
 
 public string DoOperationBlocking5()
 {
-    // Bad - Blocking the thread that enters.
-    // Bad - No effort has been made to prevent a present SynchonizationContext from becoming deadlocked.
-    // In the case of an exception, this method will throw an AggregateException wrapping the original exception.
+    // ПЛОХО - Блокировка потока, который входит.
+    // ПЛОХО - Не было предпринято никаких усилий, чтобы предотвратить взаимную блокировку текущего SynchronizationContext.
+    // В случае исключения этот метод выбросит AggregateException, обертывающий оригинальное исключение.
     return DoAsyncOperation().Result;
 }
 
 public string DoOperationBlocking6()
 {
-    // Bad - Blocking the thread that enters.
-    // Bad - No effort has been made to prevent a present SynchonizationContext from becoming deadlocked.
+    // ПЛОХО - Блокировка потока, который входит.
+    // ПЛОХО - Не было предпринято никаких усилий, чтобы предотвратить взаимную блокировку текущего SynchronizationContext.
     return DoAsyncOperation().GetAwaiter().GetResult();
 }
 
 public string DoOperationBlocking7()
 {
-    // Bad - Blocking the thread that enters.
-    // Bad - No effort has been made to prevent a present SynchonizationContext from becoming deadlocked.
+    // ПЛОХО - Блокировка потока, который входит.
+    // ПЛОХО - Не было предпринято никаких усилий, чтобы предотвратить взаимную блокировку текущего SynchronizationContext.
     var task = DoAsyncOperation();
     task.Wait();
     return task.GetAwaiter().GetResult();
 }
 ```
 
-## Prefer `await` over `ContinueWith`
+## Предпочитайте `await` вместо `ContinueWith`
 
-`Task` existed before the async/await keywords were introduced and as such provided ways to execute continuations without relying on the language. Although these methods are still valid to use, we generally recommend that you prefer `async`/`await` to using `ContinueWith`. `ContinueWith` also does not capture the `SynchronizationContext` and as a result is actually semantically different to `async`/`await`.
+`Task` существовал до введения ключевых слов `async`/`await` и, таким образом, предоставлял способы выполнения продолжений без зависимости от языка. Хотя эти методы все еще действительны для использования, мы в целом рекомендуем предпочитать `async`/`await` вместо использования `ContinueWith`. `ContinueWith` также не захватывает `SynchronizationContext`, и, как следствие, на самом деле семантически отличается от `async`/`await`.
 
-❌ **BAD** The example uses `ContinueWith` instead of `async`
+❌ **ПЛОХО** Пример использует `ContinueWith` вместо `async`
 
 ```C#
 public Task<int> DoSomethingAsync()
@@ -338,7 +344,7 @@ public Task<int> DoSomethingAsync()
 }
 ```
 
-:white_check_mark: **GOOD** This example uses the `await` keyword to get the result from `CallDependencyAsync`.
+✅ **ХОРОШО** Этот пример использует ключевое слово `await`, чтобы получить результат от `CallDependencyAsync`.
 
 ```C#
 public async Task<int> DoSomethingAsync()
@@ -350,7 +356,7 @@ public async Task<int> DoSomethingAsync()
 
 ## Always create `TaskCompletionSource<T>` with `TaskCreationOptions.RunContinuationsAsynchronously`
 
-`TaskCompletionSource<T>` is an important building block for libraries trying to adapt things that are not inherently awaitable to be awaitable via a `Task`. It is also commonly used to build higher-level operations (such as batching and other combinators) on top of existing asynchronous APIs. By default, `Task` continuations will run *inline* on the same thread that calls Try/Set(Result/Exception/Canceled). As a library author, this means having to understand that calling code can resume directly on your thread. This is extremely dangerous and can result in deadlocks, thread-pool starvation, corruption of state (if code runs unexpectedly) and more. 
+`TaskCompletionSource<T>` is an important building block for libraries trying to adapt things that are not inherently awaitable to be awaitable via a `Task`. It is also commonly used to build higher-level operations (such as batching and other combinators) on top of existing asynchronous APIs. By default, `Task` continuations will run *inline* on the same thread that calls Try/Set(Result/Exception/Canceled). As a library author, this means having to understand that calling code can resume directly on your thread. This is extremely dangerous and can result in deadlocks, thread-pool starvation, corruption of state (if code runs unexpectedly) and more.
 
 Always use `TaskCreationOptions.RunContinuationsAsynchronously` when creating the `TaskCompletionSource<T>`. This will dispatch the continuation onto the thread pool instead of executing it inline.
 
@@ -360,37 +366,37 @@ Always use `TaskCreationOptions.RunContinuationsAsynchronously` when creating th
 public Task<int> DoSomethingAsync()
 {
     var tcs = new TaskCompletionSource<int>();
-    
+  
     var operation = new LegacyAsyncOperation();
     operation.Completed += result =>
     {
         // Code awaiting on this task will resume on this thread!
         tcs.SetResult(result);
     };
-    
+  
     return tcs.Task;
 }
 ```
 
-:white_check_mark: **GOOD** This example uses `TaskCreationOptions.RunContinuationsAsynchronously` when creating the `TaskCompletionSource<T>`.
+✅ **GOOD** This example uses `TaskCreationOptions.RunContinuationsAsynchronously` when creating the `TaskCompletionSource<T>`.
 
 ```C#
 public Task<int> DoSomethingAsync()
 {
     var tcs = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
-    
+  
     var operation = new LegacyAsyncOperation();
     operation.Completed += result =>
     {
         // Code awaiting on this task will resume on a different thread-pool thread
         tcs.SetResult(result);
     };
-    
+  
     return tcs.Task;
 }
 ```
 
-:bulb:**NOTE: There are 2 enums that look alike. [`TaskCreationOptions.RunContinuationsAsynchronously`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.taskcreationoptions?view=netcore-2.0#System_Threading_Tasks_TaskCreationOptions_RunContinuationsAsynchronously) and [`TaskContinuationOptions.RunContinuationsAsynchronously`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.taskcontinuationoptions?view=netcore-2.0). Be careful not to confuse their usage.** 
+💡**NOTE: There are 2 enums that look alike. [`TaskCreationOptions.RunContinuationsAsynchronously`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.taskcreationoptions?view=netcore-2.0#System_Threading_Tasks_TaskCreationOptions_RunContinuationsAsynchronously) and [`TaskContinuationOptions.RunContinuationsAsynchronously`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.taskcontinuationoptions?view=netcore-2.0). Be careful not to confuse their usage.**
 
 ## Always dispose `CancellationTokenSource`(s) used for timeouts
 
@@ -411,7 +417,7 @@ public async Task<Stream> HttpClientAsyncWithCancellationBad()
 }
 ```
 
-:white_check_mark: **GOOD** This example disposes of the `CancellationTokenSource` and properly removes the timer from the queue.
+✅ **GOOD** This example disposes of the `CancellationTokenSource` and properly removes the timer from the queue.
 
 ```C#
 public async Task<Stream> HttpClientAsyncWithCancellationGood()
@@ -443,7 +449,7 @@ public async Task<string> DoAsyncThing(CancellationToken cancellationToken = def
 }
 ```
 
-:white_check_mark: **GOOD** This example passes the `CancellationToken` into `Stream.ReadAsync`.
+✅ **GOOD** This example passes the `CancellationToken` into `Stream.ReadAsync`.
 
 ```C#
 public async Task<string> DoAsyncThing(CancellationToken cancellationToken = default)
@@ -480,7 +486,7 @@ public static async Task<T> WithCancellation<T>(this Task<T> task, CancellationT
 }
 ```
 
-:white_check_mark: **GOOD** This example disposes of the `CancellationTokenRegistration` when one of the `Task(s)` is complete.
+✅ **GOOD** This example disposes of the `CancellationTokenRegistration` when one of the `Task(s)` is complete.
 
 ```C#
 public static async Task<T> WithCancellation<T>(this Task<T> task, CancellationToken cancellationToken)
@@ -506,11 +512,11 @@ public static async Task<T> WithCancellation<T>(this Task<T> task, CancellationT
 }
 ```
 
-:white_check_mark: **GOOD** Prefer [`Task.WaitAsync`](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task.waitasync?view=net-6.0) on .NET >= 6;
+✅ **GOOD** Prefer [`Task.WaitAsync`](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task.waitasync?view=net-6.0) on .NET >= 6;
 
 ### Using a timeout
 
-❌ **BAD** This example does not cancel the timer even if the operation successfully completes. This means you could end up with lots of timers, which can flood the timer queue. 
+❌ **BAD** This example does not cancel the timer even if the operation successfully completes. This means you could end up with lots of timers, which can flood the timer queue.
 
 ```C#
 public static async Task<T> TimeoutAfter<T>(this Task<T> task, TimeSpan timeout)
@@ -528,7 +534,7 @@ public static async Task<T> TimeoutAfter<T>(this Task<T> task, TimeSpan timeout)
 }
 ```
 
-:white_check_mark: **GOOD** This example cancels the timer if the operation successfully completes.
+✅ **GOOD** This example cancels the timer if the operation successfully completes.
 
 ```C#
 public static async Task<T> TimeoutAfter<T>(this Task<T> task, TimeSpan timeout)
@@ -554,13 +560,13 @@ public static async Task<T> TimeoutAfter<T>(this Task<T> task, TimeSpan timeout)
 }
 ```
 
-:white_check_mark: **GOOD** Prefer [`Task.WaitAsync`](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task.waitasync?view=net-6.0) on .NET >= 6;
+✅ **GOOD** Prefer [`Task.WaitAsync`](https://learn.microsoft.com/en-us/dotnet/api/system.threading.tasks.task.waitasync?view=net-6.0) on .NET >= 6;
 
 ## Always call `FlushAsync` on `StreamWriter`(s) or `Stream`(s) before calling `Dispose`
 
 When writing to a `Stream` or `StreamWriter`, even if the asynchronous overloads are used for writing, the underlying data might be buffered. When data is buffered, disposing the `Stream` or `StreamWriter` via the `Dispose` method will synchronously write/flush, which results in blocking the thread and could lead to thread-pool starvation. Either use the asynchronous `DisposeAsync` method (for example via `await using`) or call `FlushAsync` before calling `Dispose`.
 
-:bulb:**NOTE: This is only problematic if the underlying subsystem does IO.**
+💡**NOTE: This is only problematic if the underlying subsystem does IO.**
 
 ❌ **BAD** This example ends up blocking the request by writing synchronously to the HTTP-response body.
 
@@ -575,7 +581,7 @@ app.Run(async context =>
 });
 ```
 
-:white_check_mark: **GOOD** This example asynchronously flushes any buffered data while disposing the `StreamWriter`.
+✅ **GOOD** This example asynchronously flushes any buffered data while disposing the `StreamWriter`.
 
 ```C#
 app.Run(async context =>
@@ -588,7 +594,7 @@ app.Run(async context =>
 });
 ```
 
-:white_check_mark: **GOOD** This example asynchronously flushes any buffered data before disposing the `StreamWriter`.
+✅ **GOOD** This example asynchronously flushes any buffered data before disposing the `StreamWriter`.
 
 ```C#
 app.Run(async context =>
@@ -606,6 +612,7 @@ app.Run(async context =>
 ## Prefer `async`/`await` over directly returning `Task`
 
 There are benefits to using the `async`/`await` keyword instead of directly returning the `Task`:
+
 - Asynchronous and synchronous exceptions are normalized to always be asynchronous.
 - The code is easier to modify (consider adding a `using`, for example).
 - Diagnostics of asynchronous methods are easier (debugging hangs etc).
@@ -621,7 +628,7 @@ public Task<int> DoSomethingAsync()
 }
 ```
 
-:white_check_mark: **GOOD** This example uses async/await instead of directly returning the Task.
+✅ **GOOD** This example uses async/await instead of directly returning the Task.
 
 ```C#
 public async Task<int> DoSomethingAsync()
@@ -630,11 +637,11 @@ public async Task<int> DoSomethingAsync()
 }
 ```
 
-:bulb:**NOTE: There are performance considerations when using an async state machine over directly returning the `Task`. It's always faster to directly return the `Task` since it does less work but you end up changing the behavior and potentially losing some of the benefits of the async state machine.**
+💡**NOTE: There are performance considerations when using an async state machine over directly returning the `Task`. It's always faster to directly return the `Task` since it does less work but you end up changing the behavior and potentially losing some of the benefits of the async state machine.**
 
 ## AsyncLocal\<T\>
 
-Async locals are a way to store/retrieve ambient state throughout an application. This can be a *very* useful alternative to flowing explicit state everywhere, especially through call sites that you do not have much control over. While it is powerful, it is also dangerous if used incorrectly. Async locals are attached to the [execution context](https://docs.microsoft.com/en-us/dotnet/api/system.threading.executioncontext) which flows *everywhere implicitly*. Disabling execution context flow requires the use of advanced APIs (typically prefixed with the Unsafe name). As such, there's very little control over what code will attempt to access these values. 
+Async locals are a way to store/retrieve ambient state throughout an application. This can be a *very* useful alternative to flowing explicit state everywhere, especially through call sites that you do not have much control over. While it is powerful, it is also dangerous if used incorrectly. Async locals are attached to the [execution context](https://docs.microsoft.com/en-us/dotnet/api/system.threading.executioncontext) which flows *everywhere implicitly*. Disabling execution context flow requires the use of advanced APIs (typically prefixed with the Unsafe name). As such, there's very little control over what code will attempt to access these values.
 
 ### Creating an AsyncLocal\<T\>
 
@@ -876,7 +883,7 @@ class AmbientValues
 }
 ```
 
-:white_check_mark: **GOOD** The above uses a `ConcurrentDictionary<int, string>` which is thread safe.
+✅ **GOOD** The above uses a `ConcurrentDictionary<int, string>` which is thread safe.
 
 ### Don't leak your AsyncLocal\<T\>
 
@@ -975,7 +982,7 @@ class ChunkyObject
 }
 ```
 
-The above example has a singleton `NumberCache` that stores numbers for an hour. We have a `ChunkyObject` which stores a 32K string in a field, and has an async local so that any code running may access the current `ChunkyObject`. This object should be collected when the `GC` runs, but instead, we're implicitly capturing the `ChunkyObject` in the `NumberCache` via `CancellationToken.Register`. 
+The above example has a singleton `NumberCache` that stores numbers for an hour. We have a `ChunkyObject` which stores a 32K string in a field, and has an async local so that any code running may access the current `ChunkyObject`. This object should be collected when the `GC` runs, but instead, we're implicitly capturing the `ChunkyObject` in the `NumberCache` via `CancellationToken.Register`.
 
 **Instead of just caching the number and a `CancellationTokenSource`, we're implicitly capturing and storing all async locals attached to the current execution context for an hour!**
 
@@ -991,10 +998,9 @@ CancellationTokenSource -> ExecutionContext -> AsyncLocalValueMap -> ChunkObject
 
 <img width="758" alt="image" src="https://user-images.githubusercontent.com/95136/188351756-967f3d37-b302-49d3-ba04-595433c6949c.png">
 
-
 With one small tweak to this code, we can avoid the implicit execution context capture.
 
-:white_check_mark: **GOOD** Use `CancellationToken.UnsafeRegister` to avoid capturing the execution context and any async locals as part of the `NumberCache`:
+✅ **GOOD** Use `CancellationToken.UnsafeRegister` to avoid capturing the execution context and any async locals as part of the `NumberCache`:
 
 ```C#
 public class NumberCache
@@ -1030,8 +1036,7 @@ The heap looks like we'd expect. There's no execution context capture, so the `C
 
 <img width="752" alt="image" src="https://user-images.githubusercontent.com/95136/188352462-d7d627c6-e4e0-4487-b783-30880cc4916f.png">
 
-
-:bulb: **NOTE: You have NO control over how APIs decide to store the execution context, but with this understanding, you should be able to minimize memory leaks by clearing the memory using the technique described in [Creating an AsyncLocal\<T\>](#creating-an-asynclocalt) section.**
+💡 **NOTE: You have NO control over how APIs decide to store the execution context, but with this understanding, you should be able to minimize memory leaks by clearing the memory using the technique described in [Creating an AsyncLocal\<T\>](#creating-an-asynclocalt) section.**
 
 ```C#
 using System.Collections.Concurrent;
@@ -1123,7 +1128,7 @@ void MethodB()
 
 The above prints 2, 2, 2. The execution context mutations are being propagated outside of the method. This can lead to extremely confusing behavior and hard-to-track down bugs.
 
-:white_check_mark: **GOOD** Set async locals in async methods:
+✅ **GOOD** Set async locals in async methods:
 
 ```C#
 var local = new AsyncLocal<int>();
@@ -1163,7 +1168,7 @@ public class Pinger
 {
     private readonly Timer _timer;
     private readonly HttpClient _client;
-    
+  
     public Pinger(HttpClient client)
     {
         _client = client;
@@ -1184,7 +1189,7 @@ public class Pinger
 {
     private readonly Timer _timer;
     private readonly HttpClient _client;
-    
+  
     public Pinger(HttpClient client)
     {
         _client = client;
@@ -1198,14 +1203,14 @@ public class Pinger
 }
 ```
 
-:white_check_mark: **GOOD** This example uses an `async Task`-based method and discards the `Task` in the `Timer` callback. If this method fails, it will not crash the process. Instead, it will fire the [`TaskScheduler.UnobservedTaskException`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.taskscheduler.unobservedtaskexception) event.
+✅ **GOOD** This example uses an `async Task`-based method and discards the `Task` in the `Timer` callback. If this method fails, it will not crash the process. Instead, it will fire the [`TaskScheduler.UnobservedTaskException`](https://docs.microsoft.com/en-us/dotnet/api/system.threading.tasks.taskscheduler.unobservedtaskexception) event.
 
 ```C#
 public class Pinger
 {
     private readonly Timer _timer;
     private readonly HttpClient _client;
-    
+  
     public Pinger(HttpClient client)
     {
         _client = client;
@@ -1225,7 +1230,7 @@ public class Pinger
 }
 ```
 
-:white_check_mark: **GOOD** This example uses the new [`PeriodicTimer`](https://learn.microsoft.com/en-us/dotnet/api/system.threading.periodictimer) introduced in .NET 6:
+✅ **GOOD** This example uses the new [`PeriodicTimer`](https://learn.microsoft.com/en-us/dotnet/api/system.threading.periodictimer) introduced in .NET 6:
 
 ```C#
 public class Pinger : IDisposable
@@ -1281,13 +1286,13 @@ public class Program
         {
             await httpClient.GetAsync("http://pinger/api/1");
         });
-        
+  
         Console.ReadLine();
     }
 }
 ```
 
-:white_check_mark: **GOOD** This BackgroundQueue implementation offers both sync and `async` callback overloads.
+✅ **GOOD** This BackgroundQueue implementation offers both sync and `async` callback overloads.
 
 ```C#
 public class BackgroundQueue
@@ -1324,9 +1329,9 @@ public class PersonController : Controller
 }
 ```
 
-:white_check_mark: **GOOD** This implementation won't result in thread-pool starvation since we're storing a task instead of the result itself.
+✅ **GOOD** This implementation won't result in thread-pool starvation since we're storing a task instead of the result itself.
 
-:warning: `ConcurrentDictionary.GetOrAdd`, when accessed concurrently, may run the value-constructing delegate multiple times. This can result in needlessly kicking off the same potentially expensive computation multiple times.
+⚠️ `ConcurrentDictionary.GetOrAdd`, when accessed concurrently, may run the value-constructing delegate multiple times. This can result in needlessly kicking off the same potentially expensive computation multiple times.
 
 ```C#
 public class PersonController : Controller
@@ -1349,7 +1354,7 @@ public class PersonController : Controller
 }
 ```
 
-:white_check_mark: **GOOD** This implementation prevents the delegate from being executed multiple times, by using the `async` lazy pattern: even if construction of the AsyncLazy instance happens multiple times ("cheap" operation), the delegate will be called only once.
+✅ **GOOD** This implementation prevents the delegate from being executed multiple times, by using the `async` lazy pattern: even if construction of the AsyncLazy instance happens multiple times ("cheap" operation), the delegate will be called only once.
 
 ```C#
 public class PersonController : Controller
@@ -1398,14 +1403,13 @@ public interface IRemoteConnection
 }
 ```
 
-
 ❌ **BAD** This example uses `Task.Result` to get the connection in the constructor. This could lead to thread-pool starvation and deadlocks.
 
 ```C#
 public class Service : IService
 {
     private readonly IRemoteConnection _connection;
-    
+  
     public Service(IRemoteConnectionFactory connectionFactory)
     {
         _connection = connectionFactory.ConnectAsync().Result;
@@ -1413,7 +1417,7 @@ public class Service : IService
 }
 ```
 
-:white_check_mark: **GOOD** This implementation uses a static factory pattern in order to allow asynchronous construction:
+✅ **GOOD** This implementation uses a static factory pattern in order to allow asynchronous construction:
 
 ```C#
 public class Service : IService
@@ -1463,7 +1467,7 @@ public IEnumerable<Product> GetDataImpersonated(SafeAccessTokenHandle safeAccess
 }
 ```
 
-:white_check_mark: **GOOD** This example awaits the result of `RunImpersonated` (the delegate is `Func<Task<IEnumerable<Product>>>` in this case). It is the recommended practice in frameworks earlier than .NET 5.0.
+✅ **GOOD** This example awaits the result of `RunImpersonated` (the delegate is `Func<Task<IEnumerable<Product>>>` in this case). It is the recommended practice in frameworks earlier than .NET 5.0.
 
 ```C#
 public async Task<IEnumerable<Product>> GetDataImpersonatedAsync(SafeAccessTokenHandle safeAccessTokenHandle)
@@ -1474,7 +1478,7 @@ public async Task<IEnumerable<Product>> GetDataImpersonatedAsync(SafeAccessToken
 }
 ```
 
-:white_check_mark: **GOOD** This example uses the asynchronous `RunImpersonatedAsync` function and awaits its result. It is available in .NET 5.0 or newer.
+✅ **GOOD** This example uses the asynchronous `RunImpersonatedAsync` function and awaits its result. It is available in .NET 5.0 or newer.
 
 ```C#
 public async Task<IEnumerable<Product>> GetDataImpersonatedAsync(SafeAccessTokenHandle safeAccessTokenHandle)
