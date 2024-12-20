@@ -1,8 +1,8 @@
-# Common Pitfalls writing scalable services in ASP.NET Core
+# Распространенные ошибки при написании масштабируемых сервисов в ASP.NET Core
 
-This document serves as a guide for writing scalable services in ASP.NET Core. Some of the guidance is general purpose but will be explained through the lens of writing 
-web services. The examples shown here are based on experiences with customer applications and issues found on Github and Stack Overflow.
+Этот документ служит руководством по написанию масштабируемых сервисов на ASP.NET Ядро. Некоторые рекомендации носят общий характер, но будут объяснены через призму написания
+веб-сервисов. Приведенные здесь примеры основаны на опыте работы с клиентскими приложениями и проблемах, обнаруженных на Github и Stack Overflow.
 
-- [General ASP.NET Core](AspNetCoreGuidance.md)
-- [Asynchronous Programming](AsyncGuidance.md)
-- [.NET API Gotchas](Gotchas.md)
+- [Основные примеры ошибок в ASP.NET Core](AspNetCoreGuidance.md)
+- [Асинхронное программирование](AsyncGuidance.md)
+- [.NET API подводные камни](Gotchas.md)
