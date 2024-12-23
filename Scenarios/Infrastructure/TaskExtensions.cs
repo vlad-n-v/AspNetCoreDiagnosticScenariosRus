@@ -3,8 +3,8 @@
     public static class TaskExtensions
     {
         /// <summary>
-        /// The timer won't be disposed until this token triggers. If it is a long lived token
-        /// that may result in memory leaks and timer queue exhaustion!
+        /// Таймер не будет удален до тех пор, пока не сработает этот токен. 
+        /// Если это токен с длительным сроком службы, это может привести к утечке памяти и исчерпанию очереди таймера!
         /// </summary>
         public static async Task<T> WithCancellationBad<T>(this Task<T> task, CancellationToken cancellationToken)
         {
@@ -13,7 +13,7 @@
             var resultTask = await Task.WhenAny(task, delayTask);
             if (resultTask == delayTask)
             {
-                // Operation cancelled
+                // Операция отменена
                 throw new OperationCanceledException();
             }
 
@@ -21,13 +21,13 @@
         }
 
         /// <summary>
-        /// This properly registers and unregisters the token when one of the operations completes
+        /// Это правильно регистрирует и отменяет регистрацию токена при завершении одной из операци
         /// </summary>
         public static async Task<T> WithCancellation<T>(this Task<T> task, CancellationToken cancellationToken)
         {
             var tcs = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
 
-            // This disposes the registration as soon as one of the tasks trigger
+            // Это отменяет регистрацию, как только запускается одна из задач
             using (cancellationToken.Register(state =>
             {
                 ((TaskCompletionSource<object>)state).TrySetResult(null);
@@ -37,7 +37,7 @@
                 var resultTask = await Task.WhenAny(task, tcs.Task);
                 if (resultTask == tcs.Task)
                 {
-                    // Operation cancelled
+                    // Операция отменена
                     throw new OperationCanceledException(cancellationToken);
                 }
 
@@ -46,8 +46,8 @@
         }
 
         /// <summary>
-        /// This method does not cancel the timer even if the operation successfully completes.
-        /// This means you could end up with timer queue flooding!
+        /// Этот метод не отменяет таймер, даже если операция успешно завершена.
+        /// Это означает, что вы можете столкнуться с переполнением очереди по таймеру!
         /// </summary>
         public static async Task<T> TimeoutAfterBad<T>(this Task<T> task, TimeSpan timeout)
         {
@@ -56,7 +56,7 @@
             var resultTask = await Task.WhenAny(task, delayTask);
             if (resultTask == delayTask)
             {
-                // Operation cancelled
+                // Операция отменена
                 throw new OperationCanceledException();
             }
 
@@ -64,7 +64,7 @@
         }
 
         /// <summary>
-        /// This method cancels the timer if the operation successfully completes.
+        /// Этот метод отменяет действие таймера, если операция успешно завершена.
         /// </summary>
         public static async Task<T> TimeoutAfter<T>(this Task<T> task, TimeSpan timeout)
         {
@@ -75,12 +75,12 @@
                 var resultTask = await Task.WhenAny(task, delayTask);
                 if (resultTask == delayTask)
                 {
-                    // Operation cancelled
+                    // Операция отменена
                     throw new OperationCanceledException();
                 }
                 else
                 {
-                    // Cancel the timer task so that it does not fire
+                    // Отмените задание таймера, чтобы оно не сработало
                     cts.Cancel();
                 }
 
