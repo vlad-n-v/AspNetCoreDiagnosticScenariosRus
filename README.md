@@ -12,6 +12,6 @@
 
 *NOTE:* Приведенные здесь примеры основаны на опыте работы с клиентскими приложениями и проблемах, обнаруженных на Github и Stack Overflow.
 
-*Приечание:* 
-Основано на оригинальном [руководстве](https://github.com/davidfowl/AspNetCoreDiagnosticScenarios.git) Дэвида Фаулера
+*Приечание:*  
+Основано на оригинальном [руководстве](https://github.com/davidfowl/AspNetCoreDiagnosticScenarios.git) Дэвида Фаулера  
 Перевод и комментарии к коду [Владимир Найденко](https://github.com/vlad-n-v)
