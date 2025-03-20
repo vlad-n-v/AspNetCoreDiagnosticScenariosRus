@@ -1,25 +1,25 @@
-# Table of contents
- - [ASP.NET Core Guidance](#aspnet-core-guidance)
-   - [Avoid using synchronous Read/Write overloads on HttpRequest.Body and HttpResponse.Body](#avoid-using-synchronous-readwrite-overloads-on-httprequestbody-and-httpresponsebody)
-   - [Prefer using HttpRequest.ReadFormAsync() over HttpRequest.Form](#prefer-using-httprequestreadformasync-over-httprequestform)
-   - [Avoid reading large request bodies or response bodies into memory](#avoid-reading-large-request-bodies-or-response-bodies-into-memory)
-   - [Use buffered and synchronous reads and writes as an alternative to asynchronous reading and writing](#use-buffered-and-synchronous-reads-and-writes-as-an-alternative-to-asynchronous-reading-and-writing)
-   - [Do not store IHttpContextAccessor.HttpContext in a field](#do-not-store-ihttpcontextaccessorhttpcontext-in-a-field)
-   - [Do not access the HttpContext from multiple threads in parallel. It is not thread safe.](#do-not-access-the-httpcontext-from-multiple-threads-in-parallel-it-is-not-thread-safe)
-   - [Do not use the HttpContext after the request is complete](#do-not-use-the-httpcontext-after-the-request-is-complete)
-   - [Do not capture the HttpContext in background threads](#do-not-capture-the-httpcontext-in-background-threads)
-   - [Do not capture services injected into the controllers on background threads](#do-not-capture-services-injected-into-the-controllers-on-background-threads)
-   - [Avoid adding headers after the HttpResponse has started](#avoid-adding-headers-after-the-httpresponse-has-started)
+# Содержание
+ - [Руководство по ASP.NET Core](#руководство-по-aspnet-core)
+   - [Избегайте использования синхронных методов Read/Write для HttpRequest.Body и HttpResponse.Body](#избегайте-использования-синхронных-методов-readwrite-для-httprequestbody-и-httpresponsebody)
+   - [Предпочитайте использовать HttpRequest.ReadFormAsync() вместо HttpRequest.Form](#предпочитайте-использовать-httprequestreadformasync-вместо-httprequestform)
+   - [Избегайте чтения больших тел запросов или ответов в память](#избегайте-чтения-больших-тел-запросов-или-ответов-в-память)
+   - [Используйте буферизованное и синхронное чтение и запись как альтернативу асинхронному чтению и записи](#используйте-буферизованное-и-синхронное-чтение-и-запись-как-альтернативу-асинхронному-чтению-и-записи)
+   - [Не сохраняйте IHttpContextAccessor.HttpContext в поле](#не-сохраняйте-ihttpcontextaccessorhttpcontext-в-поле)
+   - [Не обращайтесь к HttpContext из нескольких потоков параллельно. Он не является потокобезопасным.](#не-обращайтесь-к-httpcontext-из-нескольких-потоков-параллельно-он-не-является-потокобезопасным)
+   - [Не используйте HttpContext после завершения запроса](#не-используйте-httpcontext-после-завершения-запроса)
+   - [Не захватывайте HttpContext в фоновых потоках](#не-захватывайте-httpcontext-в-фоновых-потоках)
+   - [Не захватывайте сервисы, внедренные в контроллеры, в фоновых потоках](#не-захватывайте-сервисы-внедренные-в-контроллеры-в-фоновых-потоках)
+   - [Избегайте добавления заголовков после запуска HttpResponse](#избегайте-добавления-заголовков-после-запуска-httpresponse)
 
-# ASP.NET Core Guidance
+# Руководство по ASP.NET Core
 
-ASP.NET Core is a cross-platform, high-performance, open-source framework for building modern, cloud-based, Internet-connected applications. This guide captures some of the common pitfalls and practices when writing scalable server applications.
+ASP.NET Core — это кроссплатформенный, высокопроизводительный фреймворк с открытым исходным кодом для создания современных облачных интернет-приложений. Это руководство описывает некоторые распространенные ловушки и практики при написании масштабируемых серверных приложений.
 
-## Avoid using synchronous Read/Write overloads on HttpRequest.Body and HttpResponse.Body
+## Избегайте использования синхронных методов Read/Write для HttpRequest.Body и HttpResponse.Body
 
-All IO in ASP.NET Core is asynchronous. Servers implement the `Stream` interface which has both synchronous and asynchronous overloads. The asynchronous ones should be preferred to avoid blocking thread pool threads (this could lead to thread pool starvation).
+Весь ввод-вывод в ASP.NET Core асинхронный. Серверы реализуют интерфейс `Stream`, который имеет как синхронные, так и асинхронные перегрузки. Предпочтительнее использовать асинхронные перегрузки, чтобы избежать блокировки потоков из пула потоков (это может привести к истощению пула потоков).
 
-❌ **BAD** This example uses the `StreamReader.ReadToEnd` and as a result blocks the current thread to wait for the result. This is an example of [sync over async](AsyncGuidance.md#avoid-using-taskresult-and-taskwait).
+❌ **ПЛОХО** В этом примере используется `StreamReader.ReadToEnd`, и в результате блокируется текущий поток в ожидании результата. Это пример [sync over async](AsyncGuidance.md#avoid-using-taskresult-and-taskwait).
 
 ```C#
 public class MyController : Controller
@@ -27,8 +27,8 @@ public class MyController : Controller
     [HttpGet("/pokemon")]
     public ActionResult<PokemonData> Get()
     {
-        // This synchronously reads the entire http request body into memory.
-        // If the client is slowly uploading, we're doing sync over async because Kestrel does *NOT* support synchronous reads.
+        // Это синхронно считывает всё тело HTTP-запроса в память.
+        // Если клиент медленно загружает данные, мы выполняем sync over async, потому что Kestrel *НЕ* поддерживает синхронное чтение.
         var json = new StreamReader(Request.Body).ReadToEnd();
 
         return JsonConvert.DeserializeObject<PokemonData>(json);
@@ -36,7 +36,7 @@ public class MyController : Controller
 }
 ```
 
-:white_check_mark: **GOOD** This example uses `StreamReader.ReadToEndAsync` and as a result, does not block the thread while reading.
+:white_check_mark: **ХОРОШО** В этом примере используется `StreamReader.ReadToEndAsync`, и в результате поток не блокируется во время чтения.
 
 ```C#
 public class MyController : Controller
@@ -44,7 +44,7 @@ public class MyController : Controller
     [HttpGet("/pokemon")]
     public async Task<ActionResult<PokemonData>> Get()
     {
-        // This asynchronously reads the entire http request body into memory.
+        // Это асинхронно считывает всё тело HTTP-запроса в память.
         var json = await new StreamReader(Request.Body).ReadToEndAsync();
 
         return JsonConvert.DeserializeObject<PokemonData>(json);
@@ -52,13 +52,13 @@ public class MyController : Controller
 }
 ```
 
-:bulb:**NOTE: If the request is large it could lead to out of memory problems which can result in a Denial Of Service. See [this](#avoid-reading-large-request-bodies-or-response-bodies-into-memory) for more information.**
+:bulb:**ПРИМЕЧАНИЕ: Если запрос большой, это может привести к проблемам с памятью, что может вызвать атаку типа "отказ в обслуживании". Подробнее см. [здесь](#избегайте-чтения-больших-тел-запросов-или-ответов-в-память).**
 
-## Prefer using HttpRequest.ReadFormAsync() over HttpRequest.Form
+## Предпочитайте использовать HttpRequest.ReadFormAsync() вместо HttpRequest.Form
 
-You should always prefer `HttpRequest.ReadFormAsync()` over `HttpRequest.Form`. The only time it is safe to use `HttpRequest.Form` is the form has already been read by a call to `HttpRequest.ReadFormAsync()` and the cached form value is being read using `HttpRequest.Form`. 
+Всегда предпочитайте `HttpRequest.ReadFormAsync()` вместо `HttpRequest.Form`. Единственный случай, когда безопасно использовать `HttpRequest.Form` — это когда форма уже была прочитана вызовом `HttpRequest.ReadFormAsync()`, и кэшированное значение формы читается с помощью `HttpRequest.Form`.
 
-❌ **BAD** This example uses HttpRequest.Form uses [sync over async](AsyncGuidance.md#avoid-using-taskresult-and-taskwait) under the covers and can lead to thread pool starvation (in some cases).
+❌ **ПЛОХО** В этом примере HttpRequest.Form использует [sync over async](AsyncGuidance.md#avoid-using-taskresult-and-taskwait) под капотом и может привести к истощению пула потоков (в некоторых случаях).
 
 ```C#
 public class MyController : Controller
@@ -75,7 +75,7 @@ public class MyController : Controller
 }
 ```
 
-:white_check_mark: **GOOD** This example uses `HttpRequest.ReadFormAsync()` to read the form body asynchronously.
+:white_check_mark: **ХОРОШО** В этом примере используется `HttpRequest.ReadFormAsync()` для асинхронного чтения тела формы.
 
 ```C#
 public class MyController : Controller
@@ -92,30 +92,30 @@ public class MyController : Controller
 }
 ```
 
-## Avoid reading large request bodies or response bodies into memory
+## Избегайте чтения больших тел запросов или ответов в память
 
-In .NET any single object allocation greater than 85KB ends up in the large object heap ([LOH](https://blogs.msdn.microsoft.com/maoni/2006/04/19/large-object-heap/)). Large objects are expensive in 2 ways:
+В .NET любое выделение одиночного объекта размером более 85 КБ попадает в кучу больших объектов ([LOH](https://blogs.msdn.microsoft.com/maoni/2006/04/19/large-object-heap/)). Большие объекты дороги в двух отношениях:
 
-- The allocation cost is high because the memory for a newly allocated large object has to be cleared (the CLR guarantees that memory for all newly allocated objects is cleared)
-- LOH is collected with the rest of the heap (it requires a "full garbage collection" or Gen2 collection)
+- Стоимость выделения высока, поскольку память для вновь выделенного большого объекта должна быть очищена (CLR гарантирует, что память для всех вновь выделенных объектов очищается)
+- LOH собирается вместе с остальной частью кучи (это требует "полной сборки мусора" или сборки поколения Gen2)
 
-This [blog post](https://adamsitnik.com/Array-Pool/#the-problem) describes the problem succinctly:
+Эта [статья в блоге](https://adamsitnik.com/Array-Pool/#the-problem) кратко описывает проблему:
 
-> When a large object is allocated, it’s marked as Gen 2 object. Not Gen 0 as for small objects. The consequences are that if you run out of memory in LOH, GC cleans up whole managed heap, not only LOH. So it cleans up Gen 0, Gen 1 and Gen 2 including LOH. This is called full garbage collection and is the most time-consuming garbage collection. For many applications, it can be acceptable. But definitely not for high-performance web servers, where few big memory buffers are needed to handle an average web request (read from a socket, decompress, decode JSON & more).
+> Когда выделяется большой объект, он помечается как объект поколения Gen 2. Не Gen 0, как для маленьких объектов. Последствия таковы, что если у вас заканчивается память в LOH, сборщик мусора очищает всю управляемую кучу, а не только LOH. Поэтому он очищает Gen 0, Gen 1 и Gen 2, включая LOH. Это называется полной сборкой мусора и является наиболее затратной по времени. Для многих приложений это может быть приемлемо. Но определенно не для высокопроизводительных веб-серверов, где для обработки среднего веб-запроса требуется несколько больших буферов памяти (чтение из сокета, распаковка, декодирование JSON и др.).
 
-Naively storing a large request or response body into a single `byte[]` or `string` may result in quickly running out of space in the LOH and may cause performance issues for your application because of full GCs running. 
+Наивное сохранение большого тела запроса или ответа в одиночный `byte[]` или `string` может привести к быстрому исчерпанию пространства в LOH и вызвать проблемы с производительностью для вашего приложения из-за полных сборок мусора.
 
-## Use buffered and synchronous reads and writes as an alternative to asynchronous reading and writing
+## Используйте буферизованное и синхронное чтение и запись как альтернативу асинхронному чтению и записи
 
-When using a serializer/de-serializer that only supports synchronous reads and writes (like JSON.NET) then prefer buffering the data into memory before passing data into the serializer/de-serializer.
+При использовании сериализатора/десериализатора, который поддерживает только синхронное чтение и запись (например, JSON.NET), предпочтительнее буферизовать данные в память перед передачей данных в сериализатор/десериализатор.
 
-:bulb:**NOTE: If the request is large it could lead to out of memory problems which can result in a Denial Of Service. See [this](#avoid-reading-large-request-bodies-or-response-bodies-into-memory) for more information.**
+:bulb:**ПРИМЕЧАНИЕ: Если запрос большой, это может привести к проблемам с памятью, что может вызвать атаку типа "отказ в обслуживании". Подробнее см. [здесь](#избегайте-чтения-больших-тел-запросов-или-ответов-в-память).**
 
-## Do not store IHttpContextAccessor.HttpContext in a field
+## Не сохраняйте IHttpContextAccessor.HttpContext в поле
 
-The `IHttpContextAccessor.HttpContext` will return the `HttpContext` of the active request when accessed from the request thread. It should not be stored in a field or variable.
+`IHttpContextAccessor.HttpContext` вернет `HttpContext` активного запроса при доступе из потока запроса. Его не следует хранить в поле или переменной.
 
-❌ **BAD** This example stores the `HttpContext` in a field then attempts to use it later.
+❌ **ПЛОХО** В этом примере `HttpContext` сохраняется в поле, а затем происходит попытка использовать его позже.
 
 ```C#
 public class MyType
@@ -136,9 +136,9 @@ public class MyType
 }
 ```
 
-The above logic will likely capture a null or bogus `HttpContext` in the constructor for later use.
+Приведенная выше логика, вероятно, захватит null или неверный `HttpContext` в конструкторе для последующего использования.
 
-:white_check_mark: **GOOD** This example stores the `IHttpContextAccessor` itself in a field and uses the `HttpContext` field at the correct time (checking for null).
+:white_check_mark: **ХОРОШО** В этом примере сам `IHttpContextAccessor` сохраняется в поле и используется поле `HttpContext` в нужное время (с проверкой на null).
 
 ```C#
 public class MyType
@@ -160,11 +160,11 @@ public class MyType
 }
 ```
 
-## Do not access the HttpContext from multiple threads in parallel. It is not thread safe.
+## Не обращайтесь к HttpContext из нескольких потоков параллельно. Он не является потокобезопасным.
 
-The `HttpContext` is *NOT* threadsafe. Accessing it from multiple threads in parallel can cause corruption resulting in undefined behavior (hangs, crashes, data corruption).
+`HttpContext` *НЕ* является потокобезопасным. Доступ к нему из нескольких потоков параллельно может привести к повреждению, вызывающему неопределенное поведение (зависания, сбои, повреждение данных).
 
-❌ **BAD** This example makes 3 parallel requests and logs the incoming request path before and after the outgoing http request. This accesses the request path from multiple threads potentially in parallel.
+❌ **ПЛОХО** В этом примере выполняются 3 параллельных запроса и записывается путь входящего запроса до и после исходящего HTTP-запроса. Это обращается к пути запроса из нескольких потоков, потенциально параллельно.
 
 ```C#
 public class AsyncController : Controller
@@ -204,7 +204,7 @@ public class AsyncController : Controller
 }
 ```
 
-:white_check_mark: **GOOD** This example copies all data from the incoming request before making the 3 parallel requests.
+:white_check_mark: **ХОРОШО** В этом примере все данные из входящего запроса копируются перед выполнением 3 параллельных запросов.
 
 ```C#
 public class AsyncController : Controller
@@ -245,11 +245,11 @@ public class AsyncController : Controller
 }
 ```
 
-## Do not use the HttpContext after the request is complete
+## Не используйте HttpContext после завершения запроса
 
-The `HttpContext` is only valid as long as there is an active http request in flight. The entire ASP.NET Core pipeline is an asynchronous chain of delegates that executes every request. When the `Task` returned from this chain completes, the `HttpContext` is recycled. 
+`HttpContext` действителен только до тех пор, пока активен HTTP-запрос. Весь конвейер ASP.NET Core — это асинхронная цепочка делегатов, которая выполняет каждый запрос. Когда `Task`, возвращаемый из этой цепочки, завершается, `HttpContext` переиспользуется.
 
-❌ **BAD** This example uses async void (which is a **ALWAYS** bad in ASP.NET Core applications) and as a result, accesses the `HttpResponse` after the http request is complete. It will crash the process as a result.
+❌ **ПЛОХО** В этом примере используется async void (что **ВСЕГДА** плохо в приложениях ASP.NET Core), и в результате происходит доступ к `HttpResponse` после завершения HTTP-запроса. Это приведет к сбою процесса.
 
 ```C#
 public class AsyncVoidController : Controller
@@ -259,13 +259,13 @@ public class AsyncVoidController : Controller
     {
         await Task.Delay(1000);
 
-        // THIS will crash the process since we're writing after the response has completed on a background thread
+        // ЭТО приведет к сбою процесса, так как мы пишем после того, как ответ завершился в фоновом потоке
         await Response.WriteAsync("Hello World");
     }
 }
 ```
 
-:white_check_mark: **GOOD** This example returns a `Task` to the framework so the http request doesn't complete until the entire action completes.
+:white_check_mark: **ХОРОШО** В этом примере возвращается `Task` фреймворку, поэтому HTTP-запрос не завершается, пока не завершится всё действие.
 
 ```C#
 public class AsyncController : Controller
@@ -280,10 +280,9 @@ public class AsyncController : Controller
 }
 ```
 
-## Do not capture the HttpContext in background threads
+## Не захватывайте HttpContext в фоновых потоках
 
-❌ **BAD** This example shows a closure is capturing the `HttpContext` from the Controller property. This is bad because this work item could run
-outside of the request scope and as a result, could lead to reading a bogus `HttpContext`.
+❌ **ПЛОХО** В этом примере показано, что замыкание захватывает `HttpContext` из свойства Controller. Это плохо, потому что этот рабочий элемент может выполняться вне области запроса и, как следствие, может привести к чтению неверного `HttpContext`.
 
 ```C#
 [HttpGet("/fire-and-forget-1")]
@@ -293,8 +292,8 @@ public IActionResult FireAndForget1()
     {
         await Task.Delay(1000);
 
-        // This closure is capturing the context from the Controller property. This is bad because this work item could run
-        // outside of the http request leading to reading of bogus data.
+        // Это замыкание захватывает контекст из свойства Controller. Это плохо, потому что этот рабочий элемент может выполняться
+        // вне HTTP-запроса, что приведет к чтению неверных данных.
         var path = HttpContext.Request.Path;
         Log(path);
     });
@@ -303,9 +302,7 @@ public IActionResult FireAndForget1()
 }
 ```
 
-
-:white_check_mark: **GOOD** This example copies the data required in the background task during the request explicitly and does not reference
-anything from the controller itself.
+:white_check_mark: **ХОРОШО** В этом примере данные, необходимые в фоновой задаче, явно копируются во время запроса и не ссылаются на сам контроллер.
 
 ```C#
 [HttpGet("/fire-and-forget-3")]
@@ -316,7 +313,7 @@ public IActionResult FireAndForget3()
     {
         await Task.Delay(1000);
 
-        // This captures just the path
+        // Это захватывает только путь
         Log(path);
     });
 
@@ -324,10 +321,9 @@ public IActionResult FireAndForget3()
 }
 ```
 
-## Do not capture services injected into the controllers on background threads
+## Не захватывайте сервисы, внедренные в контроллеры, в фоновых потоках
 
-❌ **BAD** This example shows a closure is capturing the `DbContext` from the Controller action parameter. This is bad because this work item could run
-outside of the request scope and the `PokemonDbContext` is scoped to the request. As a result, this will end up with an `ObjectDisposedException`.
+❌ **ПЛОХО** В этом примере показано, что замыкание захватывает `DbContext` из параметра действия Controller. Это плохо, потому что этот рабочий элемент может выполняться вне области запроса, а `PokemonDbContext` привязан к запросу. В результате это приведет к `ObjectDisposedException`.
 
 ```C#
 [HttpGet("/fire-and-forget-1")]
@@ -337,8 +333,8 @@ public IActionResult FireAndForget1([FromServices]PokemonDbContext context)
     {
         await Task.Delay(1000);
 
-        // This closure is capturing the context from the Controller action parameter. This is bad because this work item could run
-        // outside of the request scope and the PokemonDbContext is scoped to the request. As a result, this throws an ObjectDisposedException
+        // Это замыкание захватывает контекст из параметра действия Controller. Это плохо, потому что этот рабочий элемент может выполняться
+        // вне области запроса, а PokemonDbContext привязан к запросу. В результате это вызывает ObjectDisposedException
         context.Pokemon.Add(new Pokemon());
         await context.SaveChangesAsync();
     });
@@ -347,23 +343,22 @@ public IActionResult FireAndForget1([FromServices]PokemonDbContext context)
 }
 ```
 
-:white_check_mark: **GOOD** This example injects an `IServiceScopeFactory` and creates a new dependency injection scope in the background thread and does not reference
-anything from the controller itself.
+:white_check_mark: **ХОРОШО** В этом примере внедряется `IServiceScopeFactory` и создается новая область внедрения зависимостей в фоновом потоке, и не происходит ссылка на сам контроллер.
 
 ```C#
 [HttpGet("/fire-and-forget-3")]
 public IActionResult FireAndForget3([FromServices]IServiceScopeFactory serviceScopeFactory)
 {
-    // This version of fire and forget adds some exception handling. We're also no longer capturing the PokemonDbContext from the incoming request.
-    // Instead, we're injecting an IServiceScopeFactory (which is a singleton) in order to create a scope in the background work item.
+    // Эта версия "запустил и забыл" добавляет обработку исключений. Мы больше не захватываем PokemonDbContext из входящего запроса.
+    // Вместо этого мы внедряем IServiceScopeFactory (который является синглтоном) для создания области в фоновом рабочем элементе.
     _ = Task.Run(async () =>
     {
         await Task.Delay(1000);
 
-        // Create a scope for the lifetime of the background operation and resolve services from it
+        // Создаем область на время фоновой операции и получаем из нее сервисы
         using (var scope = serviceScopeFactory.CreateScope())
         {
-            // This will resolve a PokemonDbContext from the correct scope and the operation will succeed
+            // Это разрешит PokemonDbContext из правильной области, и операция выполнится успешно
             var context = scope.ServiceProvider.GetRequiredService<PokemonDbContext>();
 
             context.Pokemon.Add(new Pokemon());
@@ -375,11 +370,11 @@ public IActionResult FireAndForget3([FromServices]IServiceScopeFactory serviceSc
 }
 ```
 
-## Avoid adding headers after the HttpResponse has started
+## Избегайте добавления заголовков после запуска HttpResponse
 
-ASP.NET Core does not buffer the http response body. This means that the very first time the response is written, the headers are sent along with that chunk of the body to the client. When this happens, it's no longer possible to change response headers.
+ASP.NET Core не буферизует тело HTTP-ответа. Это означает, что при первой записи ответа заголовки отправляются вместе с этой частью тела клиенту. Когда это происходит, уже невозможно изменить заголовки ответа.
 
-❌ **BAD** This logic tries to add response headers after the response has already started.
+❌ **ПЛОХО** Эта логика пытается добавить заголовки ответа после того, как ответ уже начал отправляться.
 
 ```C#
 app.Use(async (next, context) =>
@@ -388,12 +383,12 @@ app.Use(async (next, context) =>
     
     await next();
     
-    // This may fail if next() already wrote to the response
+    // Это может не сработать, если next() уже записал в ответ
     context.Response.Headers["test"] = "value";    
 });
 ```
 
-:white_check_mark: **GOOD** This example checks if the http response has started before writing to the body.
+:white_check_mark: **ХОРОШО** В этом примере проверяется, начался ли HTTP-ответ, прежде чем писать в тело.
 
 ```C#
 app.Use(async (next, context) =>
@@ -402,7 +397,7 @@ app.Use(async (next, context) =>
     
     await next();
     
-    // Check if the response has already started before adding header and writing
+    // Проверить, не начался ли уже ответ, прежде чем добавлять заголовок и писать
     if (!context.Response.HasStarted)
     {
         context.Response.Headers["test"] = "value";
@@ -410,14 +405,14 @@ app.Use(async (next, context) =>
 });
 ```
 
-:white_check_mark: **GOOD** This example uses `HttpResponse.OnStarting` to set the headers before the response headers are flushed to the client.
+:white_check_mark: **ХОРОШО** В этом примере используется `HttpResponse.OnStarting` для установки заголовков до того, как заголовки ответа будут отправлены клиенту.
 
-It allows you to register a callback that will be invoked just before response headers are written to the client. It gives you the ability to append or override headers just in time, without requiring knowledge of the next middleware in the pipeline.
+Это позволяет вам зарегистрировать обратный вызов, который будет вызван непосредственно перед записью заголовков ответа клиенту. Это дает возможность добавлять или переопределять заголовки в последний момент, не требуя знания о следующем промежуточном ПО в конвейере.
 
 ```C#
 app.Use(async (next, context) =>
 {
-    // Wire up the callback that will fire just before the response headers are sent to the client.
+    // Настройка обратного вызова, который будет выполнен непосредственно перед отправкой заголовков ответа клиенту.
     context.Response.OnStarting(() => 
     {       
         context.Response.Headers["someheader"] = "somevalue"; 
